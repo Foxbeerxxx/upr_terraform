@@ -1,7 +1,7 @@
 ###cloud vars
 variable "token" {
   type        = string
-  description = "__xCT0ufIBxjB3RMggtW4jxOA51ZsI3f2sKmFlatvU579i7Vgfw"
+  description = "my token"
 }
 
 variable "cloud_id" {

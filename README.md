@@ -147,7 +147,7 @@ resource "yandex_compute_instance" "db" {
 
 3. `Провожу траблшутинг кода`
 4. `Запускаю terraform init и terraform apply `
-5. `Нифраструктура разварачивается в YC`
+5. `Ифраструктура разварачивается в YC`
 
 ![3](https://github.com/Foxbeerxxx/upr_terraform/blob/main/img/img3.png)
 
@@ -162,44 +162,132 @@ ssh ubuntu@51.250.7.239
 
 ### Задание 3
 
-`Приведите ответ в свободной форме........`
 
-1. `Заполните здесь этапы выполнения, если требуется ....`
-2. `Заполните здесь этапы выполнения, если требуется ....`
-3. `Заполните здесь этапы выполнения, если требуется ....`
-4. `Заполните здесь этапы выполнения, если требуется ....`
-5. `Заполните здесь этапы выполнения, если требуется ....`
-6. 
+1. `Пишу файл disk_vm.tf `
 
 ```
-Поле для вставки кода...
-....
-....
-....
-....
+# Создание 3 одинаковых дисков по 1 ГБ
+resource "yandex_compute_disk" "storage_disks" {
+  count       = 3
+  name        = "disk-${count.index + 1}"
+  size        = 1  
+  type        = "network-hdd"
+  zone        = var.zone
+}
+
+# Одиночная ВМ с динамическим подключением всех 3-х дисков
+resource "yandex_compute_instance" "storage" {
+  name        = "storage"
+  platform_id = "standard-v3"
+  zone        = var.zone
+
+  resources {
+    cores         = 2
+    memory        = 2
+    core_fraction = 100
+  }
+
+  scheduling_policy {
+    preemptible = true
+  }
+
+  boot_disk {
+    initialize_params {
+      image_id = data.yandex_compute_image.ubuntu.id
+      size     = 10
+      type     = "network-hdd"
+    }
+  }
+
+  dynamic "secondary_disk" {
+    for_each = yandex_compute_disk.storage_disks[*]
+    content {
+      disk_id = secondary_disk.value.id
+      auto_delete = true
+    }
+  }
+
+  network_interface {
+    subnet_id          = yandex_vpc_subnet.develop.id
+    nat                = true
+    security_group_ids = [yandex_vpc_security_group.example.id]
+  }
+
+  metadata = {
+  ssh-keys = "ubuntu:${var.ssh_key}"
+}
+}
+variable "zone" {
+  default = "ru-central1-a"
+}
+
+
 ```
 
-`При необходимости прикрепитe сюда скриншоты
-![Название скриншота](ссылка на скриншот)`
+
+2. `Провожу много разборок ошибок и как итог terraform init и  terraform apply отрабатывают верно`
+
+![5](https://github.com/Foxbeerxxx/upr_terraform/blob/main/img/img5.png)
+
 
 ### Задание 4
 
-`Приведите ответ в свободной форме........`
 
-1. `Заполните здесь этапы выполнения, если требуется ....`
-2. `Заполните здесь этапы выполнения, если требуется ....`
-3. `Заполните здесь этапы выполнения, если требуется ....`
-4. `Заполните здесь этапы выполнения, если требуется ....`
-5. `Заполните здесь этапы выполнения, если требуется ....`
-6. 
+1. ` Пишу файл inventory.tmpl`
 
 ```
-Поле для вставки кода...
-....
-....
-....
-....
+[webservers]
+%{ for host in web_hosts ~}
+${host.name} ansible_host=${host.ip} fqdn=${host.fqdn}
+%{ endfor ~}
+
+[databases]
+%{ for host in db_hosts ~}
+${host.name} ansible_host=${host.ip} fqdn=${host.fqdn}
+%{ endfor ~}
+
+[storage]
+%{ for host in storage_hosts ~}
+${host.name} ansible_host=${host.ip} fqdn=${host.fqdn}
+%{ endfor ~}
+
+
 ```
 
-`При необходимости прикрепитe сюда скриншоты
-![Название скриншота](ссылка на скриншот)`
+2. `Пишу файл ansible.tf`
+
+```
+resource "local_file" "inventory" {
+  content = templatefile("${path.module}/inventory.tmpl", {
+    web_hosts = [
+      for vm in yandex_compute_instance.web : {
+        name = vm.name
+        ip   = vm.network_interface[0].nat_ip_address
+        fqdn = vm.fqdn
+      }
+    ]
+    db_hosts = [
+      for vm in yandex_compute_instance.db : {
+        name = vm.name
+        ip   = vm.network_interface[0].nat_ip_address
+        fqdn = vm.fqdn
+      }
+    ]
+    storage_hosts = [
+      {
+        name = yandex_compute_instance.storage.name
+        ip   = yandex_compute_instance.storage.network_interface[0].nat_ip_address
+        fqdn = yandex_compute_instance.storage.fqdn
+      }
+    ]
+  })
+
+  filename = "${path.module}/inventory"
+}
+
+
+```
+3. `После выполнения terraform init и terraform apply создается файл с нужным содержанием`
+
+![6](https://github.com/Foxbeerxxx/upr_terraform/blob/main/img/img6.png)
+

@@ -30,3 +30,7 @@ variable "vpc_name" {
   default     = "develop"
   description = "VPC network&subnet name"
 }
+variable "ssh_key" {
+  description = "Публичный SSH-ключ"
+  type        = string
+}
